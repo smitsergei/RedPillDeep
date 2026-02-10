@@ -1,0 +1,6 @@
+services:
+  redpill:
+    build: .
+    env_file:
+      - .env
+    restart: always

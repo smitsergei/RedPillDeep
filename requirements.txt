@@ -1,0 +1,7 @@
+langchain
+langchain-anthropic
+pybit
+python-dotenv
+pydantic
+pandas
+numpy
