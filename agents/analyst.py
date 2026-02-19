@@ -1,32 +1,39 @@
-from langchain.agents import AgentExecutor, create_tool_calling_agent
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain.agents import create_agent
 from core.llm import get_llm
-from tools.market_tools import get_klines, get_ticker_price, calculate_pivot_zscore, get_open_positions
+from tools.market_tools import get_klines, get_ticker_price, calculate_technical_indicators, get_open_positions
 
 def create_analyst_agent():
     llm = get_llm()
-    tools = [get_klines, get_ticker_price, calculate_pivot_zscore, get_open_positions]
+    tools = [get_klines, get_ticker_price, calculate_technical_indicators, get_open_positions]
     
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", """Ты - высококвалифицированный финансовый аналитик с доступом к инструментам адаптивного мышления.
-Твоя задача: провести глубокий анализ рынка BTC/USDT.
+    system_prompt = """Ты - элитный финансовый аналитик, специализирующийся на институциональном подходе через уровни Pivot.
+Твоя цель: предоставить торговый план для BTC/USDT, основанный на иерархии уровней.
 
-Перед тем как выдать итоговый план, ТЫ ДОЛЖЕН:
-1. Тщательно проанализировать последние 5 свечей (15м), учитывая объемы и тени свечей.
-2. Сопоставить текущую цену с Pivot уровнями (S1, R1, Pivot).
-3. Оценить Z-Score: насколько текущее отклонение цены является критическим.
-4. Взвесить риски текущего режима (Ведение сделки vs Поиск новой).
+ПРОЦЕСС АНАЛИЗА:
+1. ОПРЕДЕЛИ ГЛОБАЛЬНЫЙ ТРЕНД: Используй Недельный Pivot (`weekly_pivots`).
+   - Цена ВЫШЕ недельного центрального пивота -> Тренд ключевой ВОСХОДЯЩИЙ.
+   - Цена НИЖЕ недельного центрального пивота -> Тренд ключевой НИСХОДЯЩИЙ.
+2. ИНТРАДЕЙ АНАЛИЗ: Используй Дневные Pivot (`daily_pivots`).
+   - Центральный дневной Pivot, R1 и S1 — это твои главные магниты и барьеры.
+3. ТОЧКИ ВХОДА И СТОПЫ:
+   - Старайся планировать вход МАКСИМАЛЬНО БЛИЗКО к уровням Pivot.
+   - Используй промежуточные "стоп-уровни" (`mid_r1`, `mid_s1`) для уточнения входа или как зоны для постановки Stop Loss, если цена пробивает уровень.
+4. ВОЛАТИЛЬНОСТЬ (Z-Score): Оценивай перегретость. Если Z-Score > 2 при подходе к R1 — возможен отскок.
+5. PRICE ACTION: Проверь через `get_klines`, как цена реагирует на уровень (ложные пробои, закрепления).
 
-Твой итоговый ответ должен быть структурированным и содержать обоснованный ТОРГОВЫЙ ПЛАН:
-- Направление (Buy/Sell/Hold)
-- Цена входа (или 'Market')
-- Stop Loss (обязательно)
-- Take Profit (обязательно)
-- Краткое обоснование решения."""),
-        MessagesPlaceholder(variable_name="chat_history"),
-        ("human", "{input}"),
-        MessagesPlaceholder(variable_name="agent_scratchpad"),
-    ])
+ТВОЙ ВЫХОДНОЙ ФОРМАТ (ОБЯЗАТЕЛЬНО):
+<thinking>
+1. Оценка глобального тренда (Week Pivot).
+2. Оценка дневных уровней и текущей цены относительно них.
+3. Обоснование выбора конкретного уровня для входа и промежуточного уровня для стопа.
+</thinking>
 
-    agent = create_tool_calling_agent(llm, tools, prompt)
-    return AgentExecutor(agent=agent, tools=tools, verbose=True)
+ИТОГОВЫЙ ПЛАН:
+- Резюме тренда: (Глобальный и интрадей)
+- Сигнал: (BUY / SELL / HOLD / CLOSE)
+- Уровень входа: (Конкретный уровень Pivot или Market у уровня)
+- Take Profit: (Следующий уровень Pivot)
+- Stop Loss: (За уровнем или на промежуточном 'mid' уровне)
+- Уверенность: (в % от 0 до 100)"""
+
+    return create_agent(model=llm, tools=tools, system_prompt=system_prompt)

@@ -11,9 +11,9 @@ def get_llm(temperature=1):
     return ChatAnthropic(
         model=Config.MODEL_NAME,
         temperature=1, # Обязательно 1 для режима thinking
-        max_tokens=20000, # Увеличиваем лимит, так как мысли занимают место
+        max_tokens=64000, # Увеличиваем лимит, так как мысли занимают место
         thinking={
-            "type": "enabled",
+            "type": "adaptive", # Используем рекомендованный тип adaptive
             "budget_tokens": 16000 # Бюджет на внутренние рассуждения
         },
         anthropic_api_key=Config.ZAI_API_KEY,
