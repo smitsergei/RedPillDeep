@@ -14,7 +14,8 @@ def place_order(
     tp: str = None, 
     sl: str = None,
     tpsl_mode: str = "Full",
-    position_idx: int = 0
+    position_idx: int = 0,
+    reduce_only: bool = False
 ):
     """
     Выставляет ордер на бирже.
@@ -23,6 +24,7 @@ def place_order(
     tp/sl: цены Take Profit и Stop Loss (устанавливаются сразу с ордером)
     tpsl_mode: 'Full' или 'Partial'
     position_idx: 0 (One-Way), 1 (Hedge Buy), 2 (Hedge Sell)
+    reduce_only: Если True, ордер может только уменьшить позицию.
     """
     try:
         params = {
@@ -32,7 +34,8 @@ def place_order(
             "orderType": order_type,
             "qty": str(qty),
             "positionIdx": position_idx,
-            "tpslMode": tpsl_mode
+            "tpslMode": tpsl_mode,
+            "reduceOnly": reduce_only
         }
         if price and order_type == "Limit":
             params["price"] = str(price)
