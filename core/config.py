@@ -14,5 +14,13 @@ class Config:
     ZAI_API_KEY = os.getenv("ZAI_API_KEY")
     ZAI_BASE_URL = "https://api.z.ai/api/anthropic"
     MODEL_NAME = "claude-opus-4-6"
+    
+    SYMBOL = "ETHUSDT"
 
-    SYMBOL = "BTCUSDT"
+    # Telegram конфигурация
+    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+    # ID пользователя, команды которого бот будет слушать
+    TELEGRAM_ALLOWED_USER_ID = os.getenv("TELEGRAM_ALLOWED_USER_ID")
+    # ID чата (личка или группа), куда бот будет слать 15-минутные отчеты
+    # Если не указан - шлет в личку (ALLOWED_USER_ID)
+    TELEGRAM_REPORT_CHAT_ID = os.getenv("TELEGRAM_REPORT_CHAT_ID", TELEGRAM_ALLOWED_USER_ID)
