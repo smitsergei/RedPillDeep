@@ -131,3 +131,122 @@ def calculate_technical_indicators(symbol: str = Config.SYMBOL):
     except Exception as e:
         return f"Критическая ошибка при расчете индикаторов: {e}"
 
+@tool
+def analyze_candlestick_patterns(symbol: str = Config.SYMBOL, limit: int = 50):
+    """Анализирует 15-минутные свечи: определяет тренд, диапазон консолидации, паттерны Price Action для входа."""
+    try:
+        resp = client.get_kline(category="linear", symbol=symbol, interval="15", limit=limit)
+        if resp["retCode"] != 0:
+            return f"Ошибка данных: {resp['retMsg']}"
+
+        candles = resp["result"]["list"]
+        # candles: [startTime, open, high, low, close, volume, ...]
+
+        # Парсим данные
+        data = []
+        for c in candles:
+            data.append({
+                "open": float(c[1]),
+                "high": float(c[2]),
+                "low": float(c[3]),
+                "close": float(c[4]),
+                "volume": float(c[5])
+            })
+
+        # Определяем тренд по последним 20 свечам
+        recent = data[:20]
+        highs = [x["high"] for x in recent]
+        lows = [x["low"] for x in recent]
+        closes = [x["close"] for x in recent]
+
+        # Уровни диапазона (High/Low за период)
+        range_high = max(highs)
+        range_low = min(lows)
+        current_price = data[0]["close"]
+        range_size = range_high - range_low
+
+        # Положение цены в диапазоне (0-100%)
+        price_position = ((current_price - range_low) / range_size * 100) if range_size > 0 else 50
+
+        # Определение тренда
+        higher_highs = sum(1 for i in range(len(recent)-1) if recent[i]["high"] > recent[i+1]["high"])
+        higher_lows = sum(1 for i in range(len(recent)-1) if recent[i]["low"] > recent[i+1]["low"])
+        trend = "NEUTRAL"
+        if higher_highs > 12 and higher_lows > 12:
+            trend = "UPTREND"
+        elif higher_highs < 8 and higher_lows < 8:
+            trend = "DOWNTREND"
+        elif range_size / current_price < 0.01:  # диапазон менее 1%
+            trend = "RANGE/CONSOLIDATION"
+
+        # Анализ последней свечи (текущей)
+        last = data[0]
+        body = abs(last["close"] - last["open"])
+        wick_up = last["high"] - max(last["open"], last["close"])
+        wick_down = min(last["open"], last["close"]) - last["low"]
+        total_range = last["high"] - last["low"]
+
+        # Определение типа свечи
+        candle_type = "UNKNOWN"
+        if body > total_range * 0.7:
+            candle_type = "STRONG_BULLISH" if last["close"] > last["open"] else "STRONG_BEARISH"
+        elif body < total_range * 0.3:
+            candle_type = "DOJI_INDECISION"
+        elif wick_up > body * 2:
+            candle_type = "HAMMER_BULLISH" if last["close"] > last["open"] else "SHOOTING_STAR_BEARISH"
+        elif wick_down > body * 2:
+            candle_type = "INVERTED_HAMMER"
+
+        # Паттерны из 2-3 последних свечей
+        patterns = []
+        if len(data) >= 2:
+            prev = data[1]
+            # Бычье поглощение
+            if last["close"] > last["open"] and prev["close"] < prev["open"]:
+                if last["open"] < prev["close"] and last["close"] > prev["open"]:
+                    patterns.append("BULLISH_ENGULFING")
+            # Медвежье поглощение
+            if last["close"] < last["open"] and prev["close"] > prev["open"]:
+                if last["open"] > prev["close"] and last["close"] < prev["open"]:
+                    patterns.append("BEARISH_ENGULFING")
+
+        if len(data) >= 3:
+            # Утренняя звезда (бычий разворот)
+            if (data[2]["close"] < data[2]["open"] and  # медвежья
+                data[1]["body"] < total_range * 0.3 and  # доджи
+                last["close"] > last["open"]):  # бычья
+                patterns.append("MORNING_STAR_BULLISH")
+
+        # Рекомендации по входу на основе.levels
+        entry_signals = []
+        if trend == "RANGE/CONSOLIDATION":
+            if price_position < 20:
+                entry_signals.append("NEAR_SUPPORT - возможен LONG от отката")
+            elif price_position > 80:
+                entry_signals.append("NEAR_RESISTANCE - возможен SHORT от отката")
+        elif trend == "UPTREND":
+            if price_position < 40:
+                entry_signals.append("DIP_IN_UPTREND - возможен LONG на откате")
+        elif trend == "DOWNTREND":
+            if price_position > 60:
+                entry_signals.append("RALLY_IN_DOWNTREND - возможен SHORT на отскоке")
+
+        return {
+            "trend": trend,
+            "current_price": current_price,
+            "range": {"high": range_high, "low": range_low, "size_pct": round(range_size/current_price*100, 3)},
+            "price_position_pct": round(price_position, 1),
+            "last_candle": {
+                "type": candle_type,
+                "open": last["open"],
+                "high": last["high"],
+                "low": last["low"],
+                "close": last["close"],
+                "volume": last["volume"]
+            },
+            "patterns": patterns,
+            "entry_signals": entry_signals
+        }
+    except Exception as e:
+        return f"Ошибка свечного анализа: {e}"
+

@@ -15,18 +15,45 @@ analyst_executor = create_analyst_agent()
 mm_executor = create_mm_agent()
 trader_executor = create_trader_agent()
 
+def extract_text_from_content(content) -> str:
+    """Извлекает только текст из content, игнорируя thinking блоки."""
+    if isinstance(content, str):
+        return content
+
+    # Если content — список блоков (режим thinking)
+    if isinstance(content, list):
+        texts = []
+        for block in content:
+            # Пропускаем thinking блоки
+            if isinstance(block, dict):
+                if block.get('type') == 'thinking':
+                    continue
+                if 'text' in block:
+                    texts.append(block['text'])
+            elif hasattr(block, 'type'):
+                if block.type == 'thinking':
+                    continue
+                if hasattr(block, 'text'):
+                    texts.append(block.text)
+                elif hasattr(block, 'content'):
+                    texts.append(block.content)
+            elif isinstance(block, str):
+                texts.append(block)
+        return '\n\n'.join(texts) if texts else str(content)
+
+    return str(content)
+
 def send_to_telegram(message_text: str):
     """Синхронная отправка сообщения в Telegram (так как LangChain агенты синхронные)."""
     if not Config.TELEGRAM_BOT_TOKEN or not Config.TELEGRAM_REPORT_CHAT_ID:
         return
-    
+
     url = f"https://api.telegram.org/bot{Config.TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": Config.TELEGRAM_REPORT_CHAT_ID,
-        "text": message_text,
-        "parse_mode": "Markdown"
+        "text": message_text
     }
-    
+
     try:
         requests.post(url, json=payload, timeout=5)
     except Exception as e:
@@ -44,10 +71,11 @@ class TraderInput(BaseModel):
 
 @tool("market_analyst", args_schema=AnalystInput)
 def call_analyst(query: str):
-    """Вызывает субагента-аналитика. Он анализирует рынок, проверяет старый торговый план 
+    """Вызывает субагента-аналитика. Он анализирует рынок, проверяет старый торговый план
     и обновляет его. Возвращает актуальную торговую рекомендацию."""
     result = analyst_executor.invoke({"messages": [{"role": "user", "content": query}]})
-    response = result["messages"][-1].content
+    raw_content = result["messages"][-1].content
+    response = extract_text_from_content(raw_content)
     print("\n[Аналитик] сформировал отчет.")
     print(f"Отчет:\n{response}\n")
     send_to_telegram(f"📉 **[Аналитик] сформировал отчет:**\n\n{response}")
@@ -55,11 +83,12 @@ def call_analyst(query: str):
 
 @tool("money_manager", args_schema=MMInput)
 def call_money_manager(analysis_result: str, balance_info: str = ""):
-    """Вызывает субагента мани-менеджера. Он рассчитывает параметры сделки, 
+    """Вызывает субагента мани-менеджера. Он рассчитывает параметры сделки,
     строго следуя торговому плану и лимитам риска."""
     input_text = f"Анализ: {analysis_result}. Инфо о балансе: {balance_info}"
     result = mm_executor.invoke({"messages": [{"role": "user", "content": input_text}]})
-    response = result["messages"][-1].content
+    raw_content = result["messages"][-1].content
+    response = extract_text_from_content(raw_content)
     print("\n[Мани-менеджер] рассчитал параметры сделки.")
     print(f"Вердикт:\n{response}\n")
     send_to_telegram(f"🧮 **[Мани-менеджер] рассчитал параметры:**\n\n{response}")
@@ -69,7 +98,8 @@ def call_money_manager(analysis_result: str, balance_info: str = ""):
 def call_trader(execution_plan: str):
     """Вызывает субагента-трейдера для исполнения действий, зафиксированных в торговом плане."""
     result = trader_executor.invoke({"messages": [{"role": "user", "content": execution_plan}]})
-    response = result["messages"][-1].content
+    raw_content = result["messages"][-1].content
+    response = extract_text_from_content(raw_content)
     print("\n[Трейдер] завершил выполнение.")
     print(f"Статус:\n{response}\n")
     send_to_telegram(f"⚡ **[Трейдер] исполнил план:**\n\n{response}")
